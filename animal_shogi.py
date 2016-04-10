@@ -87,7 +87,7 @@ class Player:
         self.other_alive = []
         self.other_capture = []
         self.lion_flag = False
-        self.state = []
+
         
     def lion_alive(self):
 
@@ -252,78 +252,29 @@ class MonteCarloPlayer(Player):
     def __init__(self, goal_location, player):
         Player.__init__(self, goal_location, player)
 
-        self.Q = 
-        self.R = 
-        self.pi =
-        self.counter 
-        
         self.epsilon = .1
         self.action_ = 0
+        self.Q = Root()
 
-    def action(self):
-        pass
+    def get_pieces(self, lion, chick, elephant, giraffe):
+        super(MonterCarloPlayer, self).get_pieces(lion, chick, elephant, giraffe)
+        self.states = []
+        self.actions = []
+        self.action_ = (np.random.randint(branch.ave.shape[0]), np.random.randint(branch.ave.shape[1]))##initial action
 
     def register_pieces(self, lion1, chick1, elephant1, giraffe1, lion2, chick2, elephant2, giraffe2):
         self.pieces_list = [lion1, chick1, elephant1, giraffe1, lion2, chick2, elephant2, giraffe2]
 
-    '''
-    def decoder(self, num):
-        num, lion1 = divmod(num, 26)
-        num, chick1 = divmod(num, 27)
-        num, elephant1 = divmod(num, 26)
-        num, giraffe1 = divmod(num, 26)
-        num, lion2 = divmod(num, 26)
-        num, chick2 = divmod(num, 27)
-        num, elephnat2 = divmod(num, 26)
-        num, giraffe2 = divmod(num, 26)
 
     def state_encoder(self, piece):
-        ##chick - chicken not considered yet
-        num = piece.x * 3 + piece.y
+
         if piece in self.pieces_alive:
-            return num
-        elif piece in self.pieces_capture:
-            return 12
-        elif piece in self.others_alive:
-            return num + 13
-        elif piece in self.others_capture:
-            return 25
-        else :
-            raise SyntaxError
-
-    def encoder(self):
-        num = 0
-
-        for piece in self.pieces_list:
-            num += state_encoder(piece)
-            num = num * 26
-        return num
-
-    def update_state(self):
-        self.state.
-    '''
-
-
-class Tree:
-
-    def __init__(self, piece, father, player):
-        self.state = self.state_encoder(piece, player)
-        self.register_father(father)
-        self.children_state = []
-        self.value = 0
-        #father.register_child(self.location, self)
-
-
-    def state_encoder(self, piece, player):
-        ##chick - chicken not considered yet
-
-        if piece in player.pieces_alive:
             state = ((piece.x, piece.y), 0)
-        elif piece in player.pieces_capture:
+        elif piece in self.pieces_capture:
             state = (None, 0)
-        elif piece in player.others_alive:
+        elif piece in self.others_alive:
             state = ((piece.x, piece.y), 1)
-        elif piece in player.others_capture:
+        elif piece in self.others_capture:
             state = (None, 1)
         else :
             raise SyntaxError
@@ -338,10 +289,107 @@ class Tree:
 
         return status
 
-    def register_father(father):
+    def update_state(self, action):
+        state = [self.state_encoder(piece) for piece in self.pieces_list]
+        self.states.append(state)
+        self.actions.append(action)
+
+    def action(self):
+        ##step == state
+        state = [self.state_encoder(piece) for piece in self.pieces_list]
+        self.action_ = search_policy(state)
+
+
+    def search_policy(self, step):
+        branch = self.Q
+        branch_searched = True
+        for state in step:
+            try:
+                index = branch.children_state.index(state)
+                branch = branch.children[index]
+            except :
+                branch_searched = False
+                break
+
+        if branch_searched == True:
+            if np.random.uniform(0,1) > self.epsilon:
+                action = np.unravel_index(branch.ave, branch.ave.shape)
+            else :
+                action = (np.random.randint(branch.ave.shape[0]), np.random.randint(branch.ave.shape[1]))
+        else:
+            action = (np.random.randint(branch.ave.shape[0]), np.random.randint(branch.ave.shape[1]))
+
+        return action
+
+    def make_branch(self, step, action, reward):
+        branch = self.Q
+
+        for i, state in enumerate(step):
+            try :
+                ##if it is successful to follow down tree, follow it until the end, and update its value 
+                index = branch.children_state.index(state)
+                branch = branch.children[index]
+                ## update value required
+            except :
+                ##if not, make new state
+                if i <= 6:
+                    left_branches = states[i:-1]
+                    leaf = states[-1]
+                    
+                    for branch_state in left_branches:
+                        new_branch = Tree(branch_state, branch)
+                        branch = new_branch
+                    branch = Leaf(leaf, branch)
+                    
+                elif i == 7:
+                    leaf = state[-1]
+                    branch = Leaf(leaf, branch)
+                else:
+                    raise SyntaxError
+                break
+                
+        branch.add_reward(action,reward)
+        
+    def end_episode(self, reward):
+        self.reward += reward
+        last = self.states[-1]
+        last_action = self.actions[-1]
+        self.make_branch(last, last_action, reward)
+        #############
+        for step, action in zip(self.states[:-1][::-1], self.actions[:-1][::-1]):
+            self.make_branch(step, action, reward)
+            
+
+class Root:
+    def __init__(self):
+        self.children_state = []
+
+class leaf(Tree):
+
+    def __init__(self, state, father):
+        Tree.__init__(state, father)
+        ##actions
+        self.reward = np.zeros((8, 8 + 12))##F,B,L,R,FL,FR,BL,BR, 0,0~3,2
+        self.counter = np.zeros((8, 8 + 12))
+        self.ave = np.zeros((8, 8 + 12))
+
+    def add_reward(self, action, reward):
+        self.reward[action[0]][action[1]] += reward
+                
+class Tree:
+
+    def __init__(self, state, father):
+        self.state = state
+        self.register_father(father)
+        self.children_state = []
+        self.children = []
+        #father.register_child(self.location, self)
+
+
+    def register_father(self, father):
         if not(self.state in father.children_state):
             father.children_state.append(self.state)
-
+            father.children.append(self)
 
 class ManPlayer(Player):
 
@@ -417,13 +465,17 @@ class Game:
     def win_detection(self,player,other):
 
         if other.lion_alive() == False:
-            player.reward += 1
-            other.reward -= 1
+            player.end_episode(1)
+            other.end_episode(-1)
+            ##player.reward += 1
+            ##other.reward -= 1
             return True
 
         if player.lion_flag == True:
-            player.reward += 1
-            other.reward -= 1
+            player.end_episode(1)
+            other.end_episode(-1)
+            ##player.reward += 1
+            ##other.reward -= 1
             return True
 
         if player.lion_in_goal() == True:
@@ -458,8 +510,11 @@ class Game:
 
             while True:
                 self.player1.action()
-                self.player1.inform()
                 self.player1.chick_transform()
+                self.player1.inform()
+
+                self.player2.update_state()###
+
                 ##do game
 
                 if self.win_detection(self.player1, self.player2)== True:
@@ -469,8 +524,10 @@ class Game:
                 #time.sleep(1)
                 ##do game
                 self.player2.action()
-                self.player2.inform()
                 self.player2.chick_transform()
+                self.player2.inform()
+
+                self.player1.update_state()###
 
                 if self.win_detection(self.player2, self.player1)== True:
                     #print "player2 win"
